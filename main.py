@@ -26,7 +26,7 @@ def main():
             print("Thinking...")
             answer, sources, _ = rag.generate_answer(user_input)
             
-            print(f"\nBot: {answer}\n")
+            print(f"\nWisdom Bot: {answer}\n")
             
             if sources:
                 print("--- Sources ---")
