@@ -1,0 +1,11 @@
+langchain
+langchain-community
+chromadb
+sentence-transformers
+ollama
+datasets
+pandas
+transformers
+huggingface-hub<1.0
+
+

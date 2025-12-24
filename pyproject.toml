@@ -1,0 +1,19 @@
+[project]
+name = "slm-bhagwat-gita"
+version = "0.1.0"
+description = "A high-performance RAG chatbot for the Bhagavad Gita using Hierarchical Retrieval and Re-ranking."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "datasets>=4.4.0",
+    "jupyter>=1.1.1",
+    "notebook>=7.4.7",
+    "langchain",
+    "langchain-community",
+    "chromadb",
+    "sentence-transformers",
+    "ollama",
+    "pandas",
+    "transformers",
+    "huggingface-hub<1.0",
+]
