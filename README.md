@@ -49,6 +49,10 @@ Pull the reasoning model used by the system:
 ollama pull deepseek-r1:8b
 ```
 
+> [!TIP]
+> **Custom Models**: You can use any suitable model from [Ollama](https://ollama.com/library).
+> To use a different model (e.g., `llama3.1`, `mistral`), verify it is pulled (`ollama pull <model_name>`) and update the `model` variable in `src/rag.py`.
+
 ### 3. Build Knowledge Base
 
 Download the dataset and build the enriched vector database:
@@ -88,3 +92,13 @@ Chapter 6: Dhyana Yoga, Verse 26
 *   `src/rag.py`: The Core Engine (Hierarchical Search + Re-ranking Logic).
 *   `main.py`: Interactive CLI entry point.
 *   `data/`: Stores the local vector database.
+
+## 🙏 Acknowledgments & Credits
+
+Special thanks to the authors of the following Hugging Face datasets and models used in this project:
+
+
+**Datasets**
+*   [XenArcAI/Bhagwat-Gita-Infinity](https://huggingface.co/datasets/XenArcAI/Bhagwat-Gita-Infinity)
+*   [JDhruv14/Bhagavad-Gita-QA](https://huggingface.co/datasets/JDhruv14/Bhagavad-Gita-QA)
+
