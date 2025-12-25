@@ -1,10 +1,24 @@
-from src.rag import GitaRAG
+import argparse
 import sys
+from src.rag import GitaRAG
 
 def main():
-    print("Initializing Gita Chatbot...")
+    parser = argparse.ArgumentParser(description="Bhagavad Gita Chatbot RAG")
+    parser.add_argument("--provider", type=str, default="ollama", choices=["ollama", "mlx"], help="Model provider: 'ollama' or 'mlx'")
+    parser.add_argument("--model", type=str, help="Model name (for Ollama) or path (for MLX)")
+    
+    args = parser.parse_args()
+    
+    print(f"Initializing Gita Chatbot with {args.provider}...")
+    
     try:
-        rag = GitaRAG()
+        if args.provider == "ollama":
+            model_name = args.model if args.model else "gemma3:12b"
+            rag = GitaRAG(model_provider="ollama", ollama_model=model_name)
+        else: # mlx
+            model_path = args.model if args.model else "models/gita-llama-3.2-3b-fused"
+            rag = GitaRAG(model_provider="mlx", mlx_model_path=model_path)
+            
     except Exception as e:
         print(f"Error initializing RAG: {e}")
         print("Did you run 'src/ingest.py' first?")

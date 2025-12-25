@@ -2,9 +2,16 @@ import chromadb
 from chromadb.utils import embedding_functions
 import ollama
 from sentence_transformers import CrossEncoder
+import os
+
+try:
+    from mlx_lm import load, generate
+    MLX_AVAILABLE = True
+except ImportError:
+    MLX_AVAILABLE = False
 
 class GitaRAG:
-    def __init__(self):
+    def __init__(self, model_provider="ollama", ollama_model="gemma3:12b", mlx_model_path="models/gita-llama-3.2-3b-fused"):
         self.client = chromadb.PersistentClient(path="data/chroma_db")
         self.sentence_transformer_ef = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
         self.collection = self.client.get_collection(
@@ -12,6 +19,20 @@ class GitaRAG:
             embedding_function=self.sentence_transformer_ef
         )
         self.cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+        
+        self.provider = model_provider
+        self.ollama_model = ollama_model
+        self.mlx_model_path = mlx_model_path
+        self.mlx_model = None
+        self.mlx_tokenizer = None
+        
+        if self.provider == "mlx":
+            if not MLX_AVAILABLE:
+                raise ImportError("mlx-lm not installed. Please install it with 'pip install mlx-lm' to use MLX provider.")
+            print(f"Loading MLX model from {self.mlx_model_path}...")
+            # Load model once at startup
+            self.mlx_model, self.mlx_tokenizer = load(self.mlx_model_path)
+            print("MLX model loaded successfully.")
         
     def retrieve_hierarchical(self, query):
         # Step 1: Broad Search - Find relevant Chapter Summaries
@@ -84,6 +105,35 @@ class GitaRAG:
             "slokas": {"docs": sloka_results['documents'][0], "metas": sloka_results['metadatas'][0]}
         }
     
+    def _generate_with_ollama(self, prompt):
+        try:
+            response = ollama.chat(model=self.ollama_model, messages=[
+                {'role': 'user', 'content': prompt},
+            ])
+            return response['message']['content']
+        except Exception as e:
+            return f"Error calling Ollama: {e}. Make sure Ollama is running and '{self.ollama_model}' is pulled."
+
+    def _generate_with_mlx(self, prompt):
+        # Apply chat template if using an instruct model
+        # Simple template for Llama 3
+        if hasattr(self.mlx_tokenizer, "apply_chat_template"):
+            messages = [{"role": "user", "content": prompt}]
+            formatted_prompt = self.mlx_tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
+            )
+        else:
+            formatted_prompt = prompt
+
+        response = generate(
+            self.mlx_model, 
+            self.mlx_tokenizer, 
+            prompt=formatted_prompt, 
+            verbose=False, 
+            max_tokens=1024
+        )
+        return response
+
     def generate_answer(self, query):
         # 1. Retrieve relevant documents using new strategy
         retrieved = self.retrieve_hierarchical(query)
@@ -135,18 +185,21 @@ User Question:
 
 Answer:"""
 
-        # 4. Call Ollama
-        model = "gemma3:12b"
-        try:
-            response = ollama.chat(model=model, messages=[
-                {'role': 'user', 'content': prompt},
-            ])
-            return response['message']['content'], citation_list, context_str
-        except Exception as e:
-            return f"Error calling Ollama: {e}. Make sure Ollama is running and '{model}' is pulled.", [], ""
+        # 4. Generate Response based on provider
+        if self.provider == "mlx":
+            answer = self._generate_with_mlx(prompt)
+        else:
+            answer = self._generate_with_ollama(prompt)
+            
+        return answer, citation_list, context_str
 
 if __name__ == "__main__":
-    rag = GitaRAG()
+    # Example 1: Use basic Ollama (default)
+    # rag = GitaRAG(model_provider="ollama", ollama_model="gemma3:12b")
+    
+    # Example 2: Use MLX (Uncomment to test if you have the model)
+    rag = GitaRAG(model_provider="mlx", mlx_model_path="models/gita-llama-3.2-3b-fused")
+    
     q = "Why I am always distracted?"
     print(f"Question: {q}")
     answer, sources, context_str = rag.generate_answer(q)

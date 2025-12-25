@@ -44,3 +44,5 @@ data/
 .idea
 *.swp
 .DS_Store
+models/
+adapters/
