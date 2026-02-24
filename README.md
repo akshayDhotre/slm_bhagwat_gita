@@ -111,7 +111,7 @@ This section records deliberate design choices, trade-offs considered, and known
 
 ### ADR-6: External eval config support (Crucible format)
 
-**Decision:** `ragas_eval.ipynb` can load evaluation questions from an external JSON file instead of the hardcoded built-in set.
+**Decision:** `notebooks/ragas_eval.ipynb` can load evaluation questions from an external JSON file instead of the hardcoded built-in set.
 
 **Format:**
 
@@ -156,8 +156,8 @@ Clone the repo and install dependencies:
 
 ```bash
 uv sync
-# OR
-pip install -r requirements.txt
+# OR (standard pip)
+pip install .
 ```
 
 ### 2. Model Setup
@@ -208,13 +208,18 @@ Chapter 6: Dhyana Yoga, Verse 26
 
 ## 📂 Structure
 
-- `src/data_ingestion.py`: cleaning logic, commentary extraction, and structure normalization.
-- `src/ingest.py`: ChromaDB indexing and schema management.
+- `src/data_ingestion.py`: Downloads the **RAG knowledge base** from HuggingFace (`XenArcAI/Bhagwat-Gita-Infinity`), extracts translations and commentaries, and writes `data/processed/gita_knowledge_base.jsonl`.
+- `src/download_data.py`: Downloads the **fine-tuning Q&A dataset** (`JDhruv14/Bhagavad-Gita-QA`) to `data/bhagavad_gita.csv`. Only needed if you are training or evaluating a custom model — not required for the RAG chatbot.
+- `src/ingest.py`: Reads `gita_knowledge_base.jsonl` and builds the ChromaDB vector index.
 - `src/rag.py`: Core engine — hierarchical search and distance-based ranking.
 - `src/config.py`: Central configuration — all model names, paths, and retrieval parameters.
-- `main.py`: Interactive CLI entry point.
-- `data/`: Stores the local vector database.
-- `ragas_eval.ipynb`: RAGAS evaluation notebook with Crucible JSON import support.
+- `main.py`: Interactive CLI entry point (streaming output).
+- `data/`: Stores the local vector database and processed datasets.
+- `notebooks/`: All Jupyter notebooks.
+  - `ragas_eval.ipynb`: RAGAS evaluation with Crucible JSON import support.
+  - `fine_tune_llama_mlx.ipynb`: Fine-tuning on Apple Silicon via MLX.
+  - `fine_tune_llama_unsloth.ipynb`: Fine-tuning via Unsloth (GPU/Colab).
+  - `hf_dataset_work.ipynb`: Dataset preparation and exploration. Run `src/download_data.py` first to get the training data.
 
 ## 🙏 Acknowledgments & Credits
 

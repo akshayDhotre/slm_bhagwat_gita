@@ -236,8 +236,10 @@ Answer:"""
             )
 
     def _generate_with_mlx(self, prompt: str) -> str:
-        assert self.mlx_model is not None and self.mlx_tokenizer is not None
-        assert _mlx_generate is not None, "mlx_lm.generate not available"
+        if self.mlx_model is None or self.mlx_tokenizer is None:
+            raise RuntimeError("MLX model is not loaded.")
+        if _mlx_generate is None:
+            raise RuntimeError("mlx_lm.generate not available.")
         if hasattr(self.mlx_tokenizer, "apply_chat_template"):
             messages = [{"role": "user", "content": prompt}]
             formatted_prompt = self.mlx_tokenizer.apply_chat_template(
@@ -247,7 +249,7 @@ Answer:"""
             formatted_prompt = prompt
         return _mlx_generate(  # type: ignore[misc]
             self.mlx_model, self.mlx_tokenizer,
-            prompt=formatted_prompt, verbose=False, max_tokens=1024,
+            prompt=formatted_prompt, verbose=False, max_tokens=config.MLX_MAX_TOKENS,
         )
 
     def generate_answer(self, query: str) -> tuple[str, list, str]:
@@ -288,7 +290,8 @@ Answer:"""
 
     def _stream_with_mlx(self, prompt: str) -> Iterator[str]:
         """Yield text chunks from MLX. Falls back to full generate if stream_generate unavailable."""
-        assert self.mlx_model is not None and self.mlx_tokenizer is not None
+        if self.mlx_model is None or self.mlx_tokenizer is None:
+            raise RuntimeError("MLX model is not loaded.")
         if hasattr(self.mlx_tokenizer, "apply_chat_template"):
             messages = [{"role": "user", "content": prompt}]
             formatted_prompt = self.mlx_tokenizer.apply_chat_template(
@@ -300,15 +303,16 @@ Answer:"""
         if MLX_STREAM_AVAILABLE and _mlx_stream_generate is not None:
             for response in _mlx_stream_generate(  # type: ignore[misc]
                 self.mlx_model, self.mlx_tokenizer,
-                prompt=formatted_prompt, max_tokens=1024,
+                prompt=formatted_prompt, max_tokens=config.MLX_MAX_TOKENS,
             ):
                 yield response.text
         else:
             # Older mlx_lm — generate full response and yield as one block
-            assert _mlx_generate is not None
+            if _mlx_generate is None:
+                raise RuntimeError("mlx_lm.generate not available.")
             yield _mlx_generate(  # type: ignore[misc]
                 self.mlx_model, self.mlx_tokenizer,
-                prompt=formatted_prompt, verbose=False, max_tokens=1024,
+                prompt=formatted_prompt, verbose=False, max_tokens=config.MLX_MAX_TOKENS,
             )
 
     def stream_answer(self, query: str) -> tuple[Iterator[str], list, str]:
@@ -327,14 +331,3 @@ Answer:"""
             chunks = self._stream_with_ollama(prompt)
 
         return chunks, citation_list, context_str
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    rag = GitaRAG(model_provider="mlx", mlx_model_path="models/gita-llama-3.1-8b-fused")
-    q = "Why am I always distracted?"
-    print(f"Question: {q}\nAnswer: ", end="", flush=True)
-    chunks, sources, _ = rag.stream_answer(q)
-    for chunk in chunks:
-        print(chunk, end="", flush=True)
-    print(f"\nSources: {sources}")

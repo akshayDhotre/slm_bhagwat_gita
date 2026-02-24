@@ -81,10 +81,12 @@ def main():
             if not user_input.strip():
                 continue
 
-            print("Thinking...")
-            answer, sources, _ = rag.generate_answer(user_input)
+            chunks, sources, _ = rag.stream_answer(user_input)
 
-            print(f"\nWisdom Bot: {answer}\n")
+            print("\nWisdom Bot: ", end="", flush=True)
+            for chunk in chunks:
+                print(chunk, end="", flush=True)
+            print("\n")
 
             if sources:
                 print("--- Sources ---")

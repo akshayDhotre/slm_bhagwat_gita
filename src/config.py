@@ -18,3 +18,6 @@ N_TOP_RESULTS       = 5   # final results after re-ranking
 # --- Default model configs ---
 DEFAULT_OLLAMA_MODEL   = "deepseek-r1:8b"
 DEFAULT_MLX_MODEL_PATH = "models/gita-llama-3.1-8b-fused"
+
+# --- Generation parameters ---
+MLX_MAX_TOKENS = 1024

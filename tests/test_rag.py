@@ -263,3 +263,214 @@ class TestMLXErrorHandling:
 
             with pytest.raises(ImportError, match="mlx-lm"):
                 GitaRAG(model_provider="mlx")
+
+
+# ---------------------------------------------------------------------------
+# Tests: _build_context and _build_prompt
+# ---------------------------------------------------------------------------
+
+class TestBuildContextAndPrompt:
+
+    def test_build_context_empty_retrieved(self):
+        rag = _make_rag()
+        context, citations = rag._build_context({"chapters": {"docs": [], "metas": []}, "slokas": {"docs": [], "metas": []}})
+        assert context == ""
+        assert citations == []
+
+    def test_build_context_chapter_section_present(self):
+        rag = _make_rag()
+        retrieved = {
+            "chapters": {
+                "docs": ["Chapter 2 summary text"],
+                "metas": [{"chapter": 2, "chapter_name": "Sankhya Yoga"}],
+            },
+            "slokas": {"docs": [], "metas": []},
+        }
+        context, citations = rag._build_context(retrieved)
+        assert "RELEVANT CHAPTER CONTEXT" in context
+        assert "Chapter 2" in context
+        assert "Sankhya Yoga" in context
+        assert len(citations) == 1
+
+    def test_build_context_sloka_section_present(self):
+        rag = _make_rag()
+        retrieved = {
+            "chapters": {"docs": [], "metas": []},
+            "slokas": {
+                "docs": ["Verse text here"],
+                "metas": [{"chapter": 6, "verse": 35}],
+            },
+        }
+        context, citations = rag._build_context(retrieved)
+        assert "RELEVANT VERSES" in context
+        assert "Chapter 6" in context
+        assert "Verse 35" in context
+        assert len(citations) == 1
+
+    def test_build_context_both_sections(self):
+        rag = _make_rag()
+        retrieved = {
+            "chapters": {
+                "docs": ["Chapter summary"],
+                "metas": [{"chapter": 3, "chapter_name": "Karma Yoga"}],
+            },
+            "slokas": {
+                "docs": ["Sloka text"],
+                "metas": [{"chapter": 3, "verse": 19}],
+            },
+        }
+        context, citations = rag._build_context(retrieved)
+        assert "RELEVANT CHAPTER CONTEXT" in context
+        assert "RELEVANT VERSES" in context
+        assert len(citations) == 2
+
+    def test_build_prompt_contains_query_and_context(self):
+        rag = _make_rag()
+        prompt = rag._build_prompt("What is duty?", "Some context here.")
+        assert "What is duty?" in prompt
+        assert "Some context here." in prompt
+        assert "Answer:" in prompt
+
+    def test_build_prompt_wisdom_companion_tone(self):
+        rag = _make_rag()
+        prompt = rag._build_prompt("Why do I suffer?", "context")
+        # Prompt must instruct not to quote verses
+        assert "Do NOT quote verses" in prompt
+        assert "wisdom companion" in prompt.lower() or "Bhagavad Gita" in prompt
+
+
+# ---------------------------------------------------------------------------
+# Tests: stream_answer
+# ---------------------------------------------------------------------------
+
+class TestStreamAnswer:
+
+    def test_stream_answer_returns_three_tuple(self):
+        rag = _make_rag()
+        _set_query_side_effect(
+            rag,
+            _make_chapter_result([{"type": "chapter_summary", "chapter": 2, "chapter_name": "Yoga"}]),
+            _make_sloka_result([{"type": "sloka", "chapter": 2, "verse": 47}]),
+        )
+        rag._stream_with_ollama = MagicMock(return_value=iter(["chunk1", "chunk2"]))
+
+        result = rag.stream_answer("What is karma?")
+        assert isinstance(result, tuple) and len(result) == 3
+        chunks, citations, context = result
+        assert isinstance(citations, list)
+        assert isinstance(context, str)
+
+    def test_stream_answer_yields_chunks(self):
+        rag = _make_rag()
+        _set_query_side_effect(
+            rag,
+            _make_chapter_result([{"type": "chapter_summary", "chapter": 2, "chapter_name": "Yoga"}]),
+            _make_sloka_result([{"type": "sloka", "chapter": 2, "verse": 47}]),
+        )
+        rag._stream_with_ollama = MagicMock(return_value=iter(["Hello", " world"]))
+
+        chunks, _, _ = rag.stream_answer("test")
+        collected = "".join(chunks)
+        assert collected == "Hello world"
+
+    def test_stream_answer_uses_ollama_provider(self):
+        rag = _make_rag()
+        _set_query_side_effect(
+            rag,
+            _make_chapter_result([{"type": "chapter_summary", "chapter": 2, "chapter_name": "Yoga"}]),
+            _make_sloka_result([{"type": "sloka", "chapter": 2, "verse": 47}]),
+        )
+        rag._stream_with_ollama = MagicMock(return_value=iter(["ok"]))
+        rag._stream_with_mlx = MagicMock(return_value=iter(["mlx"]))
+
+        rag.stream_answer("test")
+
+        rag._stream_with_ollama.assert_called_once()
+        rag._stream_with_mlx.assert_not_called()
+
+    def test_stream_answer_uses_mlx_provider(self):
+        rag = _make_rag()
+        rag.provider = "mlx"
+        _set_query_side_effect(
+            rag,
+            _make_chapter_result([{"type": "chapter_summary", "chapter": 2, "chapter_name": "Yoga"}]),
+            _make_sloka_result([{"type": "sloka", "chapter": 2, "verse": 47}]),
+        )
+        rag._stream_with_ollama = MagicMock(return_value=iter(["ollama"]))
+        rag._stream_with_mlx = MagicMock(return_value=iter(["mlx chunk"]))
+
+        rag.stream_answer("test")
+
+        rag._stream_with_mlx.assert_called_once()
+        rag._stream_with_ollama.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Tests: generate_answer with MLX provider
+# ---------------------------------------------------------------------------
+
+class TestGenerateAnswerMLX:
+
+    def test_mlx_provider_calls_mlx_not_ollama(self):
+        rag = _make_rag()
+        rag.provider = "mlx"
+        _set_query_side_effect(
+            rag,
+            _make_chapter_result([{"type": "chapter_summary", "chapter": 2, "chapter_name": "Yoga"}]),
+            _make_sloka_result([{"type": "sloka", "chapter": 2, "verse": 47}]),
+        )
+        rag._generate_with_ollama = MagicMock(return_value="Ollama response")
+        rag._generate_with_mlx = MagicMock(return_value="MLX response")
+
+        answer, _, _ = rag.generate_answer("test")
+
+        rag._generate_with_mlx.assert_called_once()
+        rag._generate_with_ollama.assert_not_called()
+        assert answer == "MLX response"
+
+
+# ---------------------------------------------------------------------------
+# Tests: _format_sources (from main.py)
+# ---------------------------------------------------------------------------
+
+def _get_format_sources():
+    """Import _format_sources from main without executing main()."""
+    import main
+    return main._format_sources
+
+
+class TestFormatSources:
+
+    def test_empty_citations(self):
+        fmt = _get_format_sources()
+        assert fmt([]) == ""
+
+    def test_chapter_summaries_excluded(self):
+        fmt = _get_format_sources()
+        citations = [{"type": "chapter_summary", "chapter": 2, "verse": None}]
+        assert fmt(citations) == ""
+
+    def test_sloka_citation_formatted(self):
+        fmt = _get_format_sources()
+        citations = [{"type": "sloka", "chapter": 6, "verse": 35, "chapter_name": "Dhyana Yoga"}]
+        result = fmt(citations)
+        assert "Chapter 6" in result
+        assert "Verse 35" in result
+        assert "Dhyana Yoga" in result
+
+    def test_duplicate_citations_deduped(self):
+        fmt = _get_format_sources()
+        same = {"type": "sloka", "chapter": 2, "verse": 47, "chapter_name": "Sankhya Yoga"}
+        result = fmt([same, same, same])
+        # Only one entry for ch2v47
+        assert result.count("Verse 47") == 1
+
+    def test_mixed_types_only_slokas_shown(self):
+        fmt = _get_format_sources()
+        citations = [
+            {"type": "chapter_summary", "chapter": 3},
+            {"type": "sloka", "chapter": 3, "verse": 19, "chapter_name": "Karma Yoga"},
+        ]
+        result = fmt(citations)
+        assert "Verse 19" in result
+        assert result.count("\n") == 0  # single line, no extra entries
