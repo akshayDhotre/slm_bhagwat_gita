@@ -1,61 +1,102 @@
 import argparse
+import logging
 import sys
+
+from src import config
 from src.rag import GitaRAG
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger(__name__)
+
+
+def _format_sources(citation_list: list) -> str:
+    seen = set()
+    lines = []
+    for meta in citation_list:
+        if meta.get("type") == "chapter_summary":
+            key = f"ch{meta.get('chapter')}"
+            label = f"Chapter {meta.get('chapter')}: {meta.get('chapter_name', '')}"
+        else:
+            key = f"ch{meta.get('chapter')}v{meta.get('verse')}"
+            label = (
+                f"Chapter {meta.get('chapter')}: {meta.get('chapter_name', '')}, "
+                f"Verse {meta.get('verse', '?')}"
+            )
+        if key not in seen:
+            seen.add(key)
+            lines.append(label)
+    return "\n".join(lines)
+
 
 def main():
     parser = argparse.ArgumentParser(description="Bhagavad Gita Chatbot RAG")
-    parser.add_argument("--provider", type=str, default="ollama", choices=["ollama", "mlx"], help="Model provider: 'ollama' or 'mlx'")
-    parser.add_argument("--model", type=str, help="Model name (for Ollama) or path (for MLX)")
-    
+    parser.add_argument(
+        "--provider",
+        type=str,
+        default="ollama",
+        choices=["ollama", "mlx"],
+        help="Model provider: 'ollama' or 'mlx'",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        help="Ollama model name or MLX fused model path",
+    )
     args = parser.parse_args()
-    
-    print(f"Initializing Gita Chatbot with {args.provider}...")
-    
+
+    logger.info("Initializing Gita Chatbot with provider=%s ...", args.provider)
+
     try:
         if args.provider == "ollama":
-            model_name = args.model if args.model else "gemma3:12b"
-            rag = GitaRAG(model_provider="ollama", ollama_model=model_name)
-        else: # mlx
-            model_path = args.model if args.model else "models/gita-llama-3.2-3b-fused"
-            rag = GitaRAG(model_provider="mlx", mlx_model_path=model_path)
-            
-    except Exception as e:
-        print(f"Error initializing RAG: {e}")
-        print("Did you run 'src/ingest.py' first?")
+            rag = GitaRAG(
+                model_provider="ollama",
+                ollama_model=args.model or config.DEFAULT_OLLAMA_MODEL,
+            )
+        else:
+            rag = GitaRAG(
+                model_provider="mlx",
+                mlx_model_path=args.model or config.DEFAULT_MLX_MODEL_PATH,
+            )
+    except FileNotFoundError as e:
+        logger.error("%s", e)
         sys.exit(1)
-        
+    except Exception as e:
+        logger.error("Error initializing RAG: %s", e)
+        logger.error("Did you run 'python -m src.ingest' first?")
+        sys.exit(1)
+
     print("\nNamaste! I am your Bhagavad Gita companion. Ask me anything.")
-    print("Type 'exit' or 'quit' or 'bye' to end the session.\n")
-    
+    print("Type 'exit', 'quit', or 'bye' to end the session.\n")
+
     while True:
         try:
             user_input = input("You: ")
-            if user_input.lower() in ['exit', 'quit', 'bye']:
+            if user_input.lower() in {"exit", "quit", "bye"}:
                 print("Dhanyavad! Goodbye.")
                 break
-            
             if not user_input.strip():
                 continue
-                
+
             print("Thinking...")
             answer, sources, _ = rag.generate_answer(user_input)
-            
+
             print(f"\nWisdom Bot: {answer}\n")
-            
+
             if sources:
                 print("--- Sources ---")
-                for meta in sources:
-                    chapter_info = f"Chapter {meta['chapter']}"
-                    if meta.get('chapter_name'):
-                        chapter_info += f": {meta.get('chapter_name')}"
-                    print(f"{chapter_info}, Verse {meta['verse']}")
+                print(_format_sources(sources))
                 print("---------------\n")
-                
+
         except KeyboardInterrupt:
             print("\nGoodbye.")
             break
         except Exception as e:
-            print(f"An error occurred: {e}")
+            logger.error("Unexpected error: %s", e)
+
 
 if __name__ == "__main__":
     main()
