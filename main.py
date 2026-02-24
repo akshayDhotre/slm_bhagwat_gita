@@ -14,18 +14,18 @@ logger = logging.getLogger(__name__)
 
 
 def _format_sources(citation_list: list) -> str:
+    """Format sloka citations for display. Chapter summaries are retrieval
+    routing artifacts and are excluded — only verse-level sources are shown."""
     seen = set()
     lines = []
     for meta in citation_list:
         if meta.get("type") == "chapter_summary":
-            key = f"ch{meta.get('chapter')}"
-            label = f"Chapter {meta.get('chapter')}: {meta.get('chapter_name', '')}"
-        else:
-            key = f"ch{meta.get('chapter')}v{meta.get('verse')}"
-            label = (
-                f"Chapter {meta.get('chapter')}: {meta.get('chapter_name', '')}, "
-                f"Verse {meta.get('verse', '?')}"
-            )
+            continue
+        key = f"ch{meta.get('chapter')}v{meta.get('verse')}"
+        label = (
+            f"Chapter {meta.get('chapter')}: {meta.get('chapter_name', '')}, "
+            f"Verse {meta.get('verse', '?')}"
+        )
         if key not in seen:
             seen.add(key)
             lines.append(label)
