@@ -185,7 +185,19 @@ uv run src/ingest.py
 
 ## 🏃‍♂️ Usage
 
-Start the interactive chat session:
+### Web UI (Streamlit)
+
+Start the web interface:
+
+```bash
+uv run streamlit run app.py
+```
+
+The UI streams the response token-by-token and shows the cited verses in a collapsible **Sources** panel below the chat. Use the sidebar to switch between Ollama and MLX providers.
+
+### CLI
+
+Start the interactive terminal session:
 
 ```bash
 uv run main.py
@@ -195,11 +207,9 @@ uv run main.py
 
 ```text
 You: Why am I always distracted?
-Thinking...
-Debug: Focused on Chapters: [6]
 
-Bot: Staying focused is difficult because the mind by nature is restless...
-...
+Wisdom Bot: Staying focused is difficult because the mind by nature is restless...
+
 --- Sources ---
 Chapter 6: Dhyana Yoga, Verse 35
 Chapter 6: Dhyana Yoga, Verse 26
@@ -220,6 +230,30 @@ Chapter 6: Dhyana Yoga, Verse 26
   - `fine_tune_llama_mlx.ipynb`: Fine-tuning on Apple Silicon via MLX.
   - `fine_tune_llama_unsloth.ipynb`: Fine-tuning via Unsloth (GPU/Colab).
   - `hf_dataset_work.ipynb`: Dataset preparation and exploration. Run `src/download_data.py` first to get the training data.
+
+## 🔭 Future Improvements
+
+### Retrieval
+
+- **Domain-specific embedding model** — `all-MiniLM-L6-v2` is a general-purpose model. Fine-tuning an embedding model on Gita Q&A pairs (using the `JDhruv14` dataset) would improve semantic matching for Sanskrit-derived concepts and Vedic vocabulary that general embeddings struggle with.
+- **Cross-encoder re-ranking** — re-introduce a cross-encoder (e.g., `cross-encoder/ms-marco-MiniLM-L-6-v2`) as an optional post-retrieval step, guarded behind a config flag. The joint query+document attention of a cross-encoder is more precise than bi-encoder cosine distance, especially for nuanced questions.
+- **Multi-translation indexing** — currently one author's translation is indexed per sloka. Indexing multiple translations per verse (e.g., Sivananda + Prabhupada + Gambhirananda) and pooling their embeddings would broaden semantic coverage.
+
+### Generation
+
+- **Conversation memory** — the current pipeline is stateless (each question is answered independently). Adding a short conversation buffer would allow follow-up questions like "Tell me more about that" to be resolved correctly.
+- **Configurable generation parameters** — expose `temperature`, `top_p`, and `max_tokens` in `src/config.py` and the Streamlit sidebar, rather than relying on the model's defaults.
+- **Structured output** — use a JSON-mode or tool-call response format to get the answer and a confidence signal back separately, making it easier to decide when to show "I'm not sure" messaging.
+
+### Evaluation
+
+- **Automated regression suite** — run the RAGAS evaluation notebook (`notebooks/ragas_eval.ipynb`) on a fixed golden question set as part of CI, tracking Context Recall, Faithfulness, and Answer Relevancy over time to detect retrieval or prompt regressions.
+- **Retrieval-only unit tests** — add pytest fixtures that assert specific well-known slokas (e.g., BG 2.47 for karma yoga questions) are always retrieved within the top-N results.
+
+### Infrastructure
+
+- **Docker image** — package the app (ChromaDB index + Streamlit UI) into a container so it runs without any local Python or Ollama setup, using Ollama as a sidecar service.
+- **Incremental ingestion** — the current `src/ingest.py` drops and rebuilds the entire collection on every run. A hash-based diff approach would allow adding new commentaries or translations without a full re-index.
 
 ## 🙏 Acknowledgments & Credits
 
