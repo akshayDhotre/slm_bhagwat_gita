@@ -259,7 +259,26 @@ Chapter 6: Dhyana Yoga, Verse 26
 
 Special thanks to the authors of the following Hugging Face datasets used in this project:
 
-**Datasets**
+### Datasets
 
-- [XenArcAI/Bhagwat-Gita-Infinity](https://huggingface.co/datasets/XenArcAI/Bhagwat-Gita-Infinity)
-- [JDhruv14/Bhagavad-Gita-QA](https://huggingface.co/datasets/JDhruv14/Bhagavad-Gita-QA)
+- [Parveshiiii/Bhagwat-Gita-Infinity](https://huggingface.co/datasets/Parveshiiii/Bhagwat-Gita-Infinity) — Parvesh Rawal, Modotte (2025)
+- [JDhruv14/Bhagavad-Gita-QA](https://huggingface.co/datasets/JDhruv14/Bhagavad-Gita-QA) — Dhruv Jaradi (2025)
+
+### Citations
+
+```bibtex
+@dataset{rawal2025bhagwatgitainfinity,
+  title     = {Bhagwat-Gita-Infinity},
+  author    = {Parvesh Rawal},
+  year      = {2025},
+  publisher = {Modotte},
+  url       = {https://huggingface.co/datasets/Parveshiiii/Bhagwat-Gita-Infinity}
+}
+
+@dataset{JDhruv14-Bhagavad-Gita-QA,
+  title     = {Bhagavad-Gita-QA},
+  author    = {Dhruv Jaradi},
+  year      = {2025},
+  url       = {https://huggingface.co/datasets/JDhruv14/Bhagavad-Gita-QA}
+}
+```
