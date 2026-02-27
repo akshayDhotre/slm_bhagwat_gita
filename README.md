@@ -1,5 +1,14 @@
 # Bhagavad Gita AI 🕉️
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/downloads/)
+[![Ollama](https://img.shields.io/badge/Ollama-powered-black)](https://ollama.com/)
+[![ChromaDB](https://img.shields.io/badge/ChromaDB-vector--store-orange)](https://www.trychroma.com/)
+[![MLX](https://img.shields.io/badge/MLX-Apple%20Silicon-silver)](https://github.com/ml-explore/mlx)
+[![GitHub Stars](https://img.shields.io/github/stars/akshayDhotre/slm_bhagwat_gita?style=social)](https://github.com/akshayDhotre/slm_bhagwat_gita/stargazers)
+
+![Demo](assets/demo.gif)
+
 A high-performance "Wisdom RAG" application that combines **Hierarchical Retrieval**, **Semantic Re-ranking**, and **Deep Commentary** to answer life's questions using the Bhagavad Gita.
 
 Unlike standard RAG pipelines that only match similar words, this system mimics a knowledgeable teacher: first identifying the most relevant chapter theme, drilling down to specific verses within it, and catching cross-chapter wisdom through a global fallback — all ranked by embedding similarity.
