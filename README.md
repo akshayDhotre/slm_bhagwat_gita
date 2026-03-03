@@ -13,12 +13,34 @@ A high-performance "Wisdom RAG" application that combines **Hierarchical Retriev
 
 Unlike standard RAG pipelines that only match similar words, this system mimics a knowledgeable teacher: first identifying the most relevant chapter theme, drilling down to specific verses within it, and catching cross-chapter wisdom through a global fallback — all ranked by embedding similarity.
 
+## Latest Updates
+
+### March 2026 — Live Retrieval Pipeline Visualization
+
+The Streamlit UI now optionally shows a live step-by-step trace of every RAG operation before the response streams. Enable it with the **Show retrieval pipeline** checkbox in the sidebar.
+
+Once enabled, each question triggers a transparent process view:
+
+| Stage | What it shows |
+| --- | --- |
+| **Stage 1 — Chapter Discovery** | Which chapter summaries matched the query and their names |
+| **Stage 2 — Candidate Pool** | Count of chapter-targeted verses + global cross-chapter supplement |
+| **Stage 3 — Re-ranked Verses** | Top N verses ordered by embedding distance with score and text snippet |
+| **Stage 4 — System Prompt** | Full prompt sent to the LLM (expandable) |
+
+The pipeline trace stays visible after the response is generated and persists through the conversation so you can compare retrieval results across questions. Toggle it off to return to the clean chat interface.
+
+Under the hood, `retrieve_hierarchical` in [src/rag.py](src/rag.py) was refactored into three independently callable stage methods — `query_chapters`, `query_slokas`, and `merge_and_rerank` — so the app can interleave UI updates between each real database call rather than showing a fake progress animation.
+
+---
+
 ## Key Features
 
 - **Hierarchical Retrieval**: "Forest & Trees" approach. First identifies the most relevant chapter themes, then searches for specific slokas within that context, supplemented by a global cross-chapter fallback.
 - **Distance-Based Re-ranking**: Merges candidates from primary and global searches, deduplicates, then sorts by ChromaDB's embedding distance — no separate re-ranking model needed.
 - **Commentary-Enriched**: Indexes deep philosophical Purports/Commentaries (Swami Sivananda, Prabhupada, etc.) alongside translations to capture abstract concepts.
 - **Context-Aware Citations**: Answers are grounded with citations like `[Chapter 6: Dhyana Yoga, Verse 34]`.
+- **Live Pipeline Transparency**: Optional sidebar toggle reveals the full retrieval trace — chapters matched, candidate counts, re-ranked verses with distance scores, and the exact system prompt — updating live as each stage completes.
 - **Privacy-First**: Runs 100% locally using Ollama and ChromaDB.
 
 ## Architecture

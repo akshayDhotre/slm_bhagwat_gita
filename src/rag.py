@@ -64,37 +64,30 @@ class GitaRAG:
             logger.info("MLX model loaded successfully.")
 
     # ------------------------------------------------------------------
-    # Retrieval
+    # Retrieval — individual stages (callable independently for live UI)
     # ------------------------------------------------------------------
 
-    def retrieve_hierarchical(self, query: str) -> dict:
-        """
-        Two-stage retrieval with cross-chapter fallback.
-
-        Stage 1: Find the most relevant chapter summaries (broad theme search).
-        Stage 2: Retrieve slokas from those chapters (primary), then supplement
-                 with a small global search to catch cross-chapter wisdom.
-        Stage 3: Merge unique candidates, sort by embedding distance, return top-N.
-
-        Re-ranking uses ChromaDB's embedding distances directly — no separate
-        cross-encoder model needed.  Lower distance = more similar to the query.
-        """
-        # --- Stage 1: chapter summary search ---
-        chapter_results = self.collection.query(
+    def query_chapters(self, query: str) -> tuple[list, list, list]:
+        """Stage 1: search chapter summaries for the broadest thematic match.
+        Returns (chapter_docs, chapter_metas, found_chapter_ids)."""
+        results = self.collection.query(
             query_texts=[query],
             n_results=config.N_CHAPTER_RESULTS,
             where={"type": "chapter_summary"},
         )
-
         chapter_docs, chapter_metas, found_chapters = [], [], []
-        if chapter_results["documents"] and chapter_results["documents"][0]:
-            chapter_docs = chapter_results["documents"][0]
-            chapter_metas = chapter_results["metadatas"][0]
+        if results["documents"] and results["documents"][0]:
+            chapter_docs = results["documents"][0]
+            chapter_metas = results["metadatas"][0]
             found_chapters = list({m["chapter"] for m in chapter_metas})
+        return chapter_docs, chapter_metas, found_chapters
 
-        logger.debug("Primary chapters: %s", found_chapters)
-
-        # --- Stage 2a: chapter-filtered sloka search ---
+    def query_slokas(
+        self, query: str, found_chapters: list
+    ) -> tuple[list, list, list, list, list, list]:
+        """Stage 2: chapter-targeted retrieval + global cross-chapter supplement.
+        Returns (primary_docs, primary_metas, primary_distances,
+                 global_docs,  global_metas,  global_distances)."""
         primary_docs, primary_metas, primary_distances = [], [], []
         if found_chapters:
             where_clause = {
@@ -112,7 +105,6 @@ class GitaRAG:
             primary_metas     = (res["metadatas"]  or [[]])[0]
             primary_distances = (res["distances"]  or [[]])[0]
 
-        # --- Stage 2b: global supplement (cross-chapter fallback) ---
         global_res = self.collection.query(
             query_texts=[query],
             n_results=config.N_GLOBAL_SUPPLEMENT,
@@ -122,8 +114,20 @@ class GitaRAG:
         global_metas     = (global_res["metadatas"]  or [[]])[0]
         global_distances = (global_res["distances"]  or [[]])[0]
 
-        # --- Merge: deduplicate by (chapter, verse), first seen wins ---
-        seen_keys = set()
+        return (
+            primary_docs, primary_metas, primary_distances,
+            global_docs,  global_metas,  global_distances,
+        )
+
+    def merge_and_rerank(
+        self,
+        primary_docs: list, primary_metas: list, primary_distances: list,
+        global_docs:  list, global_metas:  list, global_distances:  list,
+        found_chapters: list,
+    ) -> tuple[list, list, list, list, int]:
+        """Stage 3: deduplicate, sort by embedding distance, select top-N.
+        Returns (final_docs, final_metas, top_debug, new_chapters, merged_count)."""
+        seen_keys: set = set()
         merged_docs, merged_metas, merged_distances = [], [], []
         for doc, meta, dist in (
             list(zip(primary_docs, primary_metas, primary_distances))
@@ -136,14 +140,10 @@ class GitaRAG:
                 merged_metas.append(meta)
                 merged_distances.append(dist)
 
-        # Log chapters actually present in the merged pool
         merged_chapters = sorted({m.get("chapter") for m in merged_metas})
         new_chapters = sorted(set(merged_chapters) - set(found_chapters))
-        if new_chapters:
-            logger.debug("Cross-chapter supplement added chapters: %s", new_chapters)
 
-        # --- Stage 3: sort by embedding distance (ascending = most similar first) ---
-        final_docs, final_metas = [], []
+        final_docs, final_metas, top_debug = [], [], []
         if merged_docs:
             scored = sorted(
                 zip(merged_distances, merged_docs, merged_metas),
@@ -152,10 +152,50 @@ class GitaRAG:
             top = scored[: config.N_TOP_RESULTS]
             final_docs  = [x[1] for x in top]
             final_metas = [x[2] for x in top]
+            top_debug = [
+                {
+                    "chapter": meta.get("chapter"),
+                    "chapter_name": meta.get("chapter_name", ""),
+                    "verse": meta.get("verse"),
+                    "distance": round(dist, 4),
+                    "text_snippet": (doc[:180] + "…") if len(doc) > 180 else doc,
+                }
+                for dist, doc, meta in top
+            ]
+
+        return final_docs, final_metas, top_debug, new_chapters, len(merged_docs)
+
+    # ------------------------------------------------------------------
+    # Retrieval — full pipeline (thin wrapper around the three stages)
+    # ------------------------------------------------------------------
+
+    def retrieve_hierarchical(self, query: str) -> dict:
+        """Run all three retrieval stages and return a unified result dict."""
+        chapter_docs, chapter_metas, found_chapters = self.query_chapters(query)
+        logger.debug("Primary chapters: %s", found_chapters)
+
+        (primary_docs, primary_metas, primary_distances,
+         global_docs,  global_metas,  global_distances) = self.query_slokas(query, found_chapters)
+
+        final_docs, final_metas, top_debug, new_chapters, merged_count = self.merge_and_rerank(
+            primary_docs, primary_metas, primary_distances,
+            global_docs,  global_metas,  global_distances,
+            found_chapters,
+        )
+        if new_chapters:
+            logger.debug("Cross-chapter supplement added chapters: %s", new_chapters)
 
         return {
             "chapters": {"docs": chapter_docs, "metas": chapter_metas},
             "slokas":   {"docs": final_docs,   "metas": final_metas},
+            "debug": {
+                "chapter_metas": chapter_metas,
+                "primary_sloka_count": len(primary_docs),
+                "global_sloka_count": len(global_docs),
+                "merged_count": merged_count,
+                "new_chapters": new_chapters,
+                "top_verses": top_debug,
+            },
         }
 
     # ------------------------------------------------------------------
@@ -315,19 +355,28 @@ Answer:"""
                 prompt=formatted_prompt, verbose=False, max_tokens=config.MLX_MAX_TOKENS,
             )
 
-    def stream_answer(self, query: str) -> tuple[Iterator[str], list, str]:
+    def stream_from_retrieved(
+        self, retrieved: dict, query: str
+    ) -> tuple[Iterator[str], list, str, str]:
+        """Build context + prompt from pre-retrieved data, then begin streaming.
+        Returns (chunk_iterator, citation_list, context_str, llm_prompt).
+        Use this when retrieval was already done step-by-step (e.g. live UI pipeline).
+        """
+        context_str, citation_list = self._build_context(retrieved)
+        llm_prompt = self._build_prompt(query, context_str)
+        if self.provider == "mlx":
+            chunks = self._stream_with_mlx(llm_prompt)
+        else:
+            chunks = self._stream_with_ollama(llm_prompt)
+        return chunks, citation_list, context_str, llm_prompt
+
+    def stream_answer(self, query: str) -> tuple[Iterator[str], list, str, dict, str]:
         """
         Stream-friendly variant of generate_answer.
-        Returns (chunk_iterator, citation_list, context_str).
+        Returns (chunk_iterator, citation_list, context_str, debug_info, llm_prompt).
         Caller must consume chunk_iterator to receive the full answer.
+        debug_info contains intermediate retrieval data for pipeline visualisation.
         """
         retrieved = self.retrieve_hierarchical(query)
-        context_str, citation_list = self._build_context(retrieved)
-        prompt = self._build_prompt(query, context_str)
-
-        if self.provider == "mlx":
-            chunks = self._stream_with_mlx(prompt)
-        else:
-            chunks = self._stream_with_ollama(prompt)
-
-        return chunks, citation_list, context_str
+        chunks, citation_list, context_str, llm_prompt = self.stream_from_retrieved(retrieved, query)
+        return chunks, citation_list, context_str, retrieved.get("debug", {}), llm_prompt
